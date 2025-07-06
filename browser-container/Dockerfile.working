@@ -1,0 +1,33 @@
+FROM alpine:latest
+
+# Install packages
+RUN apk add --no-cache \
+    chromium \
+    openbox \
+    xvfb \
+    x11vnc \
+    python3 \
+    bash \
+    xdotool \
+    && apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    novnc \
+    websockify
+
+# Create chrome user
+RUN adduser -D -s /bin/bash chrome
+
+# Copy startup script
+COPY start.sh /start.sh
+COPY keyboard-handler.sh /keyboard-handler.sh
+RUN chmod +x /start.sh /keyboard-handler.sh
+
+# Create necessary directories
+RUN mkdir -p /home/chrome/Downloads && \
+    chown -R chrome:chrome /home/chrome
+
+EXPOSE 5901
+
+USER chrome
+WORKDIR /home/chrome
+
+CMD ["/start.sh"]

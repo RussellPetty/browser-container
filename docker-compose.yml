@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  session-manager:
+    build: 
+      context: ./session-manager
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - AUTH_TOKEN=${AUTH_TOKEN}
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-production}
+      - ALLOWED_DOMAIN=${ALLOWED_DOMAIN:-portal2.ai}
+    volumes:
+      - ./user-profiles:/app/user-profiles
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/admin/users", "-H", "Authorization: Bearer ${AUTH_TOKEN}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - browser-network
+
+  # Browser containers are created dynamically by session-manager
+  # This section documents the configuration used for browser containers
+  browser-template:
+    build:
+      context: ./browser-container
+      dockerfile: Dockerfile.optimized
+    image: remote-chrome-final-fixed
+    profiles:
+      - template  # This prevents auto-start, containers created on-demand
+    environment:
+      - DISPLAY=:1
+      - START_URL=https://google.com
+      - SESSION_ID=
+      - SESSION_API_URL=http://session-manager:3000
+    volumes:
+      - user-profile:/home/chrome/.config/chromium
+      - downloads:/home/chrome/Downloads
+    networks:
+      - browser-network
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+          cpus: '0.4'
+        reservations:
+          memory: 350M
+          cpus: '0.2'
+    restart: unless-stopped
+
+volumes:
+  user-profiles:
+    driver: local
+  user-profile:
+    driver: local
+  downloads:
+    driver: local
+
+networks:
+  browser-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  session-manager:
+    build: 
+      context: ../session-manager
+      dockerfile: Dockerfile
+    environment:
+      - AUTH_TOKEN=${AUTH_TOKEN}
+      - PORT=3000
+      - NODE_ENV=production
+      - ALLOWED_DOMAIN=${ALLOWED_DOMAIN:-portal2.ai}
+    volumes:
+      - ../user-profiles:/app/user-profiles
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/admin/users", "-H", "Authorization: Bearer ${AUTH_TOKEN}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - browser-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - /var/log/nginx:/var/log/nginx
+    depends_on:
+      - session-manager
+    restart: unless-stopped
+    networks:
+      - browser-network
+
+  # Monitoring (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    networks:
+      - browser-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    networks:
+      - browser-network
+
+volumes:
+  user-profiles:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  browser-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,65 @@
+# Multi-stage build for optimized container size
+FROM alpine:latest AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    curl \
+    wget
+
+# Download and prepare noVNC (instead of using edge package)
+RUN mkdir -p /opt && \
+    cd /opt && \
+    wget -qO- https://github.com/novnc/noVNC/archive/v1.3.0.tar.gz | tar xz && \
+    mv noVNC-1.3.0 novnc
+
+# Production stage
+FROM alpine:latest
+
+# Install only essential runtime packages (optimized selection)
+RUN apk add --no-cache \
+    chromium \
+    openbox \
+    xvfb \
+    x11vnc \
+    python3 \
+    supervisor \
+    xdotool \
+    inotify-tools \
+    curl \
+    && apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    websockify \
+    && rm -rf /var/cache/apk/* \
+    && rm -rf /tmp/* \
+    && rm -rf /usr/share/man \
+    && rm -rf /usr/share/doc
+
+# Copy noVNC from builder stage
+COPY --from=builder /opt/novnc /usr/share/novnc
+
+# Create chrome user with optimized settings
+RUN adduser -D -s /bin/sh chrome && \
+    mkdir -p /home/chrome/Downloads && \
+    chown -R chrome:chrome /home/chrome
+
+# Copy configuration files
+COPY supervisord.optimized.conf /etc/supervisor/conf.d/supervisord.conf
+COPY start-optimized.sh /start.sh
+COPY download-monitor.sh /usr/local/bin/download-monitor.sh
+
+# Set permissions and create necessary directories
+RUN chmod +x /start.sh /usr/local/bin/download-monitor.sh && \
+    mkdir -p /var/log/supervisor && \
+    chown -R chrome:chrome /var/log/supervisor
+
+# Create minimal font cache to speed up Chrome startup
+RUN fc-cache -fv
+
+# Optimize for smaller image (safe cleanup)
+RUN find /usr/share -name 'locale' -type d -exec find {} -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} + \; 2>/dev/null || true && \
+    find /usr/share -name 'i18n' -type d -exec find {} -name 'locales' -type d -exec find {} -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} + \; \; 2>/dev/null || true && \
+    rm -rf /usr/share/gtk-doc /usr/share/texmf /usr/share/help 2>/dev/null || true
+
+EXPOSE 5901
+
+# Use supervisor to manage processes (no more exec)
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

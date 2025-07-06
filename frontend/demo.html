@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Browser Container Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .controls { margin: 20px 0; }
+    .user-info { background: #e8f4fd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    button { padding: 10px 20px; margin: 5px; }
+    input[type="email"], input[type="url"] { padding: 8px; margin: 5px; min-width: 200px; }
+    #browser-frame { width: 100%; height: 600px; border: 1px solid #ccc; }
+    .vnc-sidebar-overlay { position: absolute; top: 0; left: 0; width: 75px; height: 100%; background: white; z-index: 1000; pointer-events: none; }
+    .status { padding: 10px; background: #f0f0f0; margin: 10px 0; }
+    .returning-user { background: #d4edda; color: #155724; }
+    .download-item { margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+    .download-ready { background: #fff3cd; }
+    .download-completed { background: #d1ecf1; }
+    .toast { position: fixed; top: 20px; right: 20px; background: #333; color: white; padding: 15px; border-radius: 5px; z-index: 10000; }
+    .stats { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .stat-item { text-align: center; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
+    .loading { display: none; }
+    .loading.active { display: inline-block; }
+    .loading::after { content: "..."; animation: dots 1s infinite; }
+    @keyframes dots { 0%, 20% { content: ""; } 40% { content: "."; } 60% { content: ".."; } 80%, 100% { content: "..."; } }
+    .browser-controls { display: none; position: absolute; top: 10px; left: 10px; z-index: 10001; background: rgba(0,0,0,0.8); border-radius: 8px; padding: 10px; }
+    .browser-controls.active { display: flex; gap: 10px; }
+    .control-btn { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .control-btn:hover { background: #0056b3; }
+    .control-btn:disabled { background: #6c757d; cursor: not-allowed; }
+    .browser-frame-container { position: relative; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌐 Remote Browser Demo with User Profiles</h1>
+    
+    <div class="user-info">
+      <h3>👤 User Identity</h3>
+      <input type="email" id="user-email" placeholder="your-email@example.com" value="demo@example.com">
+      <p><small>Enter your email to maintain the same browser profile across sessions. Your cookies, logins, and preferences will be preserved.</small></p>
+    </div>
+    
+    <div class="controls">
+      <input type="url" id="url-input" placeholder="https://example.com" value="https://news.ycombinator.com">
+      <button onclick="startSession()">🚀 Start Browser Session</button>
+      <button onclick="stopSession()">🛑 Stop Session</button>
+      <button onclick="checkDownloads()">📥 Check Downloads</button>
+      <button onclick="downloadAll()">📦 Download All Files</button>
+    </div>
+    
+    <div id="status" class="status">Ready to start - Enter your email and URL above</div>
+    
+    <div class="stats" id="stats" style="display: none;">
+      <h3>📊 Session Stats</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="session-count">0</div>
+          <div>Total Sessions</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="download-count">0</div>
+          <div>Downloads Ready</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="user-type">New</div>
+          <div>User Type</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="downloads-info" style="display: none;">
+      <div class="user-info">
+        <h3>📥 Downloads</h3>
+        <div id="downloads-list"></div>
+      </div>
+    </div>
+    
+    <div class="browser-frame-container">
+      <div class="browser-controls" id="browser-controls">
+        <button class="control-btn" onclick="browserBack()" id="back-btn">← Back</button>
+        <button class="control-btn" onclick="browserForward()" id="forward-btn">Forward →</button>
+        <button class="control-btn" onclick="browserRefresh()">🔄 Refresh</button>
+        <button class="control-btn" onclick="browserHome()">🏠 Home</button>
+      </div>
+      <div class="vnc-sidebar-overlay"></div>
+      <iframe id="browser-frame" style="display: none;"></iframe>
+    </div>
+  </div>
+
+  <script>
+    let currentSession = null;
+    let heartbeatInterval = null;
+    let downloadCheckInterval = null;
+    let sessionStats = { sessions: 0, downloads: 0, userType: 'New' };
+    
+    // Auth token - in production this should be passed from portal2.ai
+    const AUTH_TOKEN = 'your-auth-token-here'; // Replace with actual token
+    
+    async function startSession() {
+      const url = document.getElementById('url-input').value;
+      const email = document.getElementById('user-email').value;
+      const status = document.getElementById('status');
+      
+      if (!email) {
+        alert('Please enter your email to maintain profile continuity');
+        return;
+      }
+      
+      status.innerHTML = 'Starting browser session<span class="loading active"></span>';
+      
+      try {
+        const response = await fetch('http://localhost:3000/session', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AUTH_TOKEN}`
+          },
+          body: JSON.stringify({ url, email })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        currentSession = data.sessionId;
+        
+        const iframe = document.getElementById('browser-frame');
+        // Use VNC URL with right-click enabled and controls hidden
+        iframe.src = data.iframeSrc.replace('?autoconnect=true&resize=scale', '?autoconnect=true&resize=scale&view_only=false&show_dot=false&path=websockify&local_cursor=true&encrypt=false');
+        iframe.style.display = 'block';
+        
+        // Update stats
+        sessionStats.sessions++;
+        sessionStats.userType = data.isReturningUser ? 'Returning' : 'New';
+        updateStats();
+        
+        // Show browser controls
+        document.getElementById('browser-controls').classList.add('active');
+        
+        if (data.isReturningUser) {
+          status.innerHTML = `✅ Welcome back! Session active: <code>${currentSession}</code>`;
+          status.className = 'status returning-user';
+        } else {
+          status.innerHTML = `🆕 New profile created. Session active: <code>${currentSession}</code>`;
+          status.className = 'status';
+        }
+        
+        // Start heartbeat and download monitoring
+        heartbeatInterval = setInterval(sendHeartbeat, 10000);
+        downloadCheckInterval = setInterval(checkDownloads, 5000);
+        
+        showNotification('🚀 Browser session started successfully!');
+        
+      } catch (error) {
+        console.error('Session start error:', error);
+        status.innerHTML = `❌ Error starting session: ${error.message}`;
+        status.className = 'status';
+      }
+    }
+    
+    async function checkDownloads() {
+      if (!currentSession) return;
+      
+      try {
+        const response = await fetch(`http://localhost:3000/session/${currentSession}/downloads`, {
+          headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+        });
+        const data = await response.json();
+        
+        const downloadsInfo = document.getElementById('downloads-info');
+        const downloadsList = document.getElementById('downloads-list');
+        
+        if (data.downloads && data.downloads.length > 0) {
+          const pendingDownloads = data.downloads.filter(d => !d.downloaded);
+          const completedDownloads = data.downloads.filter(d => d.downloaded);
+          
+          // Update stats
+          sessionStats.downloads = pendingDownloads.length;
+          updateStats();
+          
+          let html = '';
+          
+          if (pendingDownloads.length > 0) {
+            html += `<h4>📋 Ready for Download (${pendingDownloads.length})</h4>`;
+            pendingDownloads.forEach(download => {
+              html += `
+                <div class="download-item download-ready">
+                  <strong>📄 ${download.filename}</strong> 
+                  <span style="color: #666;">(${formatFileSize(download.filesize)})</span>
+                  <br>
+                  <small>Downloaded: ${new Date(download.timestamp * 1000).toLocaleString()}</small>
+                  <br>
+                  <button onclick="downloadFile('${download.filename}')" style="margin-top: 5px;">
+                    💾 Download to Your Computer
+                  </button>
+                </div>
+              `;
+            });
+            
+            html += `
+              <button onclick="downloadAll()" style="margin-top: 10px; background: #007bff; color: white;">
+                📦 Download All Files (${pendingDownloads.length})
+              </button>
+            `;
+          }
+          
+          if (completedDownloads.length > 0) {
+            html += `<h4>✅ Already Downloaded (${completedDownloads.length})</h4>`;
+            completedDownloads.forEach(download => {
+              html += `
+                <div class="download-item download-completed">
+                  <strong>📄 ${download.filename}</strong> 
+                  <span style="color: #666;">(${formatFileSize(download.filesize)})</span>
+                  <span style="color: #28a745; margin-left: 10px;">✅ Downloaded</span>
+                </div>
+              `;
+            });
+          }
+          
+          downloadsList.innerHTML = html;
+          downloadsInfo.style.display = 'block';
+          
+        } else {
+          downloadsInfo.style.display = 'none';
+          sessionStats.downloads = 0;
+          updateStats();
+        }
+        
+      } catch (error) {
+        console.error('Error checking downloads:', error);
+      }
+    }
+    
+    async function downloadFile(filename) {
+      if (!currentSession) return;
+      
+      try {
+        const downloadUrl = `http://localhost:3000/download/${currentSession}/${encodeURIComponent(filename)}`;
+        
+        // Create temporary link and click it
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification(`📥 Downloading ${filename}...`);
+        
+        // Refresh download list after a delay
+        setTimeout(checkDownloads, 2000);
+        
+      } catch (error) {
+        console.error('Download error:', error);
+        alert('Error downloading file: ' + error.message);
+      }
+    }
+    
+    async function downloadAll() {
+      if (!currentSession) return;
+      
+      try {
+        const response = await fetch(`http://localhost:3000/session/${currentSession}/downloads`, {
+          headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+        });
+        const data = await response.json();
+        
+        const pendingDownloads = data.downloads.filter(d => !d.downloaded);
+        
+        if (pendingDownloads.length === 0) {
+          showNotification('📭 No files to download');
+          return;
+        }
+        
+        showNotification(`📦 Downloading ${pendingDownloads.length} files...`);
+        
+        for (const download of pendingDownloads) {
+          await downloadFile(download.filename);
+          // Small delay between downloads
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+      } catch (error) {
+        console.error('Error downloading all files:', error);
+      }
+    }
+    
+    function updateStats() {
+      document.getElementById('session-count').textContent = sessionStats.sessions;
+      document.getElementById('download-count').textContent = sessionStats.downloads;
+      document.getElementById('user-type').textContent = sessionStats.userType;
+      document.getElementById('stats').style.display = 'block';
+    }
+    
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function showNotification(message) {
+      // Simple toast notification
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => document.body.removeChild(toast), 300);
+      }, 3000);
+    }
+    
+    async function sendHeartbeat() {
+      if (currentSession) {
+        try {
+          await fetch(`http://localhost:3000/heartbeat/${currentSession}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+          });
+        } catch (error) {
+          console.error('Heartbeat failed:', error);
+        }
+      }
+    }
+    
+    async function stopSession() {
+      if (!currentSession) {
+        showNotification('🚫 No active session to stop');
+        return;
+      }
+      
+      const status = document.getElementById('status');
+      status.innerHTML = 'Stopping session<span class="loading active"></span>';
+      
+      try {
+        await fetch(`http://localhost:3000/stop/${currentSession}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+        });
+        
+        // Clean up intervals
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = null;
+        }
+        
+        if (downloadCheckInterval) {
+          clearInterval(downloadCheckInterval);
+          downloadCheckInterval = null;
+        }
+        
+        // Hide iframe and controls
+        const iframe = document.getElementById('browser-frame');
+        iframe.style.display = 'none';
+        iframe.src = '';
+        
+        // Hide browser controls
+        document.getElementById('browser-controls').classList.remove('active');
+        
+        currentSession = null;
+        status.innerHTML = '🛑 Session stopped - your profile and downloads are saved!';
+        status.className = 'status';
+        
+        showNotification('🛑 Session stopped successfully!');
+        
+      } catch (error) {
+        console.error('Error stopping session:', error);
+        status.innerHTML = `❌ Error stopping session: ${error.message}`;
+      }
+    }
+    
+    // Send heartbeat on user activity
+    document.addEventListener('mousemove', () => {
+      if (currentSession && !heartbeatInterval) {
+        sendHeartbeat();
+      }
+    });
+    
+    // Browser control functions
+    function browserBack() {
+      if (currentSession) {
+        sendBrowserCommand('back');
+      }
+    }
+    
+    function browserForward() {
+      if (currentSession) {
+        sendBrowserCommand('forward');
+      }
+    }
+    
+    function browserRefresh() {
+      if (currentSession) {
+        sendBrowserCommand('refresh');
+      }
+    }
+    
+    function browserHome() {
+      if (currentSession) {
+        const startUrl = document.getElementById('url-input').value || 'https://google.com';
+        sendBrowserCommand('navigate', { url: startUrl });
+      }
+    }
+    
+    async function sendBrowserCommand(action, params = {}) {
+      try {
+        await fetch(`http://localhost:3000/browser-command/${currentSession}`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AUTH_TOKEN}`
+          },
+          body: JSON.stringify({ action, ...params })
+        });
+      } catch (error) {
+        console.error('Browser command error:', error);
+      }
+    }
+    
+    // Auto-check downloads periodically
+    setInterval(() => {
+      if (currentSession) {
+        checkDownloads();
+      }
+    }, 10000);
+    
+    // Test API connection on page load
+    window.addEventListener('load', async () => {
+      try {
+        const response = await fetch('http://localhost:3000/admin/users', {
+          headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+        });
+        if (response.ok) {
+          showNotification('✅ Connected to Session Manager API');
+        }
+      } catch (error) {
+        showNotification('❌ Cannot connect to Session Manager API - make sure it\'s running on port 3000');
+      }
+    });
+  </script>
+</body>
+</html>
