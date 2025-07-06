@@ -14,7 +14,7 @@ pkill -f chromium-browser 2>/dev/null || true
 # Wait a moment
 sleep 2
 
-# Start Chrome with minimal flags
+# Start Chrome with minimal flags and profile recovery options
 cd /home/chrome
 exec chromium-browser \
     --no-sandbox \
@@ -36,6 +36,12 @@ exec chromium-browser \
     --disable-crash-reporter \
     --disable-client-side-phishing-detection \
     --disable-web-security \
+    --disable-session-crashed-bubble \
+    --disable-infobars \
+    --hide-crash-restore-bubble \
+    --disable-features=VizDisplayCompositor \
+    --disable-logging \
+    --silent-debugger-extension-api \
     --user-data-dir=/home/chrome/.config/chromium \
     --window-size=1280,1024 \
     --start-maximized \

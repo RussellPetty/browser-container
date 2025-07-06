@@ -76,19 +76,64 @@ app.post('/session', authenticateToken, async (req, res) => {
     const userId = getUserId(userIdentifier);
     const userProfilePath = path.join(PROFILES_DIR, userId);
     
-    // Ensure user profile directory exists
+    // Ensure user profile directory exists with correct ownership and structure
     try {
       await fs.access(userProfilePath);
+      console.log(`Using existing profile for: ${userIdentifier} (${userId})`);
     } catch {
+      console.log(`Creating new profile for: ${userIdentifier} (${userId})`);
+      
+      // Create profile directory structure
       await fs.mkdir(userProfilePath, { recursive: true });
+      await fs.mkdir(path.join(userProfilePath, 'Downloads'), { recursive: true });
+      await fs.mkdir(path.join(userProfilePath, 'Default'), { recursive: true });
+      await fs.mkdir(path.join(userProfilePath, 'Default', 'Local Storage'), { recursive: true });
+      await fs.mkdir(path.join(userProfilePath, 'Default', 'Session Storage'), { recursive: true });
+      await fs.mkdir(path.join(userProfilePath, 'ShaderCache'), { recursive: true });
+      
+      // Create essential Chrome profile files
+      const localState = '{"profile":{"info_cache":{}}}';
+      const preferences = JSON.stringify({
+        "profile": {
+          "default_content_setting_values": {
+            "notifications": 2
+          },
+          "name": userIdentifier,
+          "managed_user_id": ""
+        }
+      }, null, 2);
+      
+      await fs.writeFile(path.join(userProfilePath, 'Local State'), localState);
+      await fs.writeFile(path.join(userProfilePath, 'Default', 'Preferences'), preferences);
+      await fs.writeFile(path.join(userProfilePath, 'First Run'), new Date().toISOString());
+      
+      // Set ownership to chrome user (UID/GID 1000) for volume mount compatibility
+      try {
+        await new Promise((resolve, reject) => {
+          exec(`chown -R 1000:1000 "${userProfilePath}"`, (chownError, stdout, stderr) => {
+            if (chownError) {
+              console.error('Chown error:', chownError, stderr);
+              reject(chownError);
+            } else {
+              console.log(`Set ownership 1000:1000 for ${userProfilePath}`);
+              resolve();
+            }
+          });
+        });
+      } catch (chownError) {
+        console.error('Failed to set profile ownership, continuing anyway:', chownError);
+      }
+      
       console.log(`Created new user profile for: ${userIdentifier} (${userId})`);
     }
     
-    // For local testing with Docker - simplified command without volume mounts
+    // For local testing with Docker - mount user profile for persistence
     const command = `docker run -d -p 0:5901 \\
       -e START_URL="${startUrl}" \\
       -e SESSION_ID="${sessionId}" \\
       -e SESSION_API_URL="http://172.17.0.1:3000" \\
+      -v "${path.resolve(userProfilePath)}:/home/chrome/.config/chromium:Z" \\
+      -v "${path.resolve(userProfilePath)}/Downloads:/home/chrome/Downloads:Z" \\
       --network browser-container_browser-network \\
       --name chrome-${sessionId} \\
       remote-chrome-final-fixed`;
@@ -106,7 +151,11 @@ app.post('/session', authenticateToken, async (req, res) => {
         }
         
         const port = portStdout.trim().split('\n')[0].split('0.0.0.0:')[1];
-        const iframeSrc = `http://localhost:3000/vnc/${sessionId}/vnc.html?autoconnect=true&resize=scale`;
+        
+        // Use the actual host from the request instead of localhost
+        const host = req.get('host') || 'localhost:3000';
+        const protocol = req.secure ? 'https' : 'http';
+        const iframeSrc = `${protocol}://${host}/vnc/${sessionId}/vnc.html?autoconnect=true&resize=scale`;
         
         sessions.set(sessionId, {
           containerId: `chrome-${sessionId}`,

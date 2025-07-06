@@ -1,0 +1,157 @@
+{
+  "account_tracker_service_last_update": "13234567890000000",
+  "autofill": {
+    "orphan_rows_removed": true
+  },
+  "browser": {
+    "check_default_browser": false,
+    "first_run_tabs": [],
+    "has_seen_welcome_page": true
+  },
+  "countryid_at_install": 0,
+  "default_search_provider_data": {
+    "template_url_data": {
+      "keyword": "google.com",
+      "short_name": "Google",
+      "url": "https://www.google.com/search?q={searchTerms}"
+    }
+  },
+  "domain_diversity": {
+    "last_reporting_timestamp": "0"
+  },
+  "extensions": {
+    "alerts": {
+      "initialized": true
+    },
+    "chrome_url_overrides": {},
+    "last_chrome_version": "138.0.7204.93",
+    "settings": {},
+    "theme": {
+      "use_system": true
+    }
+  },
+  "profile": {
+    "avatar_index": 0,
+    "content_settings": {
+      "enable_quiet_permission_ui_enabling_method": {
+        "notifications": 1
+      },
+      "exceptions": {
+        "accessibility_events": {},
+        "app_banner": {},
+        "ar": {},
+        "auto_select_certificate": {},
+        "automatic_downloads": {},
+        "autoplay": {},
+        "background_sync": {},
+        "bluetooth_chooser_data": {},
+        "bluetooth_guard": {},
+        "bluetooth_scanning": {},
+        "camera_pan_tilt_zoom": {},
+        "client_hints": {},
+        "clipboard": {},
+        "cookies": {},
+        "durable_storage": {},
+        "fedcm_active_session": {},
+        "fedcm_idp_registration": {},
+        "fedcm_idp_signin": {},
+        "fedcm_share": {},
+        "file_handling": {},
+        "file_system_access_chooser_data": {},
+        "file_system_last_picked_directory": {},
+        "file_system_read_guard": {},
+        "file_system_write_guard": {},
+        "font_access": {},
+        "formfill_metadata": {},
+        "geolocation": {},
+        "get_display_media_set_select_all_screens": {},
+        "hid_chooser_data": {},
+        "hid_guard": {},
+        "http_allowed": {},
+        "idle_detection": {},
+        "images": {},
+        "important_site_info": {},
+        "insecure_private_network": {},
+        "intent_picker_auto_display": {},
+        "javascript": {},
+        "javascript_jit": {},
+        "legacy_cookie_access": {},
+        "local_fonts": {},
+        "media_engagement": {},
+        "media_stream_camera": {},
+        "media_stream_mic": {},
+        "midi_sysex": {},
+        "mixed_script": {},
+        "nfc": {},
+        "notification_interactions": {},
+        "notification_permission_review": {},
+        "notifications": {},
+        "password_protection": {},
+        "payment_handler": {},
+        "permission_autoblocking_data": {},
+        "permission_autorevocation_data": {},
+        "popups": {},
+        "private_network_chooser_data": {},
+        "private_network_guard": {},
+        "protocol_handler": {},
+        "reduced_accept_language": {},
+        "safe_browsing_url_check_data": {},
+        "sensors": {},
+        "serial_chooser_data": {},
+        "serial_guard": {},
+        "site_engagement": {},
+        "sound": {},
+        "ssl_cert_decisions": {},
+        "storage_access": {},
+        "subresource_filter": {},
+        "subresource_filter_data": {},
+        "third_party_storage_partitioning": {},
+        "top_level_storage_access": {},
+        "unused_site_permissions": {},
+        "usb_chooser_data": {},
+        "usb_guard": {},
+        "vr": {},
+        "webid_api": {},
+        "webid_auto_reauthn": {},
+        "window_placement": {}
+      },
+      "pref_version": 1
+    },
+    "created_by_version": "138.0.7204.93",
+    "creation_time": "13234567890000000",
+    "default_content_setting_values": {
+      "notifications": 2
+    },
+    "default_content_settings": {
+      "geolocation": 1,
+      "media_stream_camera": 1,
+      "media_stream_mic": 1,
+      "midi_sysex": 1,
+      "notifications": 2,
+      "push_messaging": 1,
+      "ssl_cert_decisions": 1
+    },
+    "exit_type": "Normal",
+    "exited_cleanly": true,
+    "managed_user_id": "",
+    "name": "User"
+  },
+  "safebrowsing": {
+    "event_timestamps": {},
+    "metrics_last_log_time": "13234567890"
+  },
+  "sessions": {
+    "event_log": [],
+    "session_data_status": 1
+  },
+  "signin": {
+    "allowed": true
+  },
+  "sync": {
+    "requested": false
+  },
+  "translate_site_blocklist_with_time": {},
+  "web_apps": {
+    "did_migrate_default_chrome_apps": []
+  }
+}

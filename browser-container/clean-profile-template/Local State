@@ -1,0 +1,26 @@
+{
+  "background_mode": {
+    "enabled": false
+  },
+  "browser": {
+    "enabled_labs_experiments": []
+  },
+  "dns_prefetching": {
+    "host_referral_list": [],
+    "startup_list": []
+  },
+  "net": {
+    "network_prediction_options": 1
+  },
+  "profile": {
+    "info_cache": {},
+    "last_used": "Default",
+    "last_active_profiles": [ "Default" ],
+    "profiles_created": 1
+  },
+  "user_experience_metrics": {
+    "stability": {
+      "stats_version": 2
+    }
+  }
+}

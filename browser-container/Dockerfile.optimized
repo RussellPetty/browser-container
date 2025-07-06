@@ -37,19 +37,24 @@ RUN apk add --no-cache \
 # Copy noVNC from builder stage
 COPY --from=builder /opt/novnc /usr/share/novnc
 
-# Create chrome user with optimized settings
-RUN adduser -D -s /bin/sh chrome && \
+# Create chrome user with specific UID/GID for volume mount compatibility
+RUN adduser -D -s /bin/sh -u 1000 chrome && \
     mkdir -p /home/chrome/Downloads && \
+    mkdir -p /home/chrome/.config/chromium && \
     chown -R chrome:chrome /home/chrome
 
 # Copy configuration files
 COPY supervisord.optimized.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start-optimized.sh /start.sh
 COPY start-chrome.sh /start-chrome.sh
+COPY init-profile.sh /usr/local/bin/init-profile.sh
 COPY download-monitor.sh /usr/local/bin/download-monitor.sh
 
+# Copy clean Chrome profile template
+COPY clean-profile-template /usr/local/share/chrome-template
+
 # Set permissions and create necessary directories
-RUN chmod +x /start.sh /start-chrome.sh /usr/local/bin/download-monitor.sh && \
+RUN chmod +x /start.sh /start-chrome.sh /usr/local/bin/init-profile.sh /usr/local/bin/download-monitor.sh && \
     mkdir -p /var/log/supervisor && \
     chown -R chrome:chrome /var/log/supervisor
 
