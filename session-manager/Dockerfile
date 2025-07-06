@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Install Docker CLI
+RUN apk add --no-cache docker-cli curl
+
 # Create app directory
 WORKDIR /app
 
@@ -13,11 +16,7 @@ RUN npm ci --only=production
 COPY server.js ./
 
 # Create user profiles directory
-RUN mkdir -p user-profiles && \
-    chown -R node:node user-profiles
-
-# Switch to non-root user
-USER node
+RUN mkdir -p user-profiles
 
 # Expose port
 EXPOSE 3000

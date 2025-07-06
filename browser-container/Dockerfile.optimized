@@ -28,8 +28,9 @@ RUN apk add --no-cache \
     curl \
     && apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing \
     websockify \
+    && mkdir -p /home/chrome/crashpad_db \
+    && chmod 777 /home/chrome/crashpad_db \
     && rm -rf /var/cache/apk/* \
-    && rm -rf /tmp/* \
     && rm -rf /usr/share/man \
     && rm -rf /usr/share/doc
 
@@ -44,10 +45,11 @@ RUN adduser -D -s /bin/sh chrome && \
 # Copy configuration files
 COPY supervisord.optimized.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start-optimized.sh /start.sh
+COPY start-chrome.sh /start-chrome.sh
 COPY download-monitor.sh /usr/local/bin/download-monitor.sh
 
 # Set permissions and create necessary directories
-RUN chmod +x /start.sh /usr/local/bin/download-monitor.sh && \
+RUN chmod +x /start.sh /start-chrome.sh /usr/local/bin/download-monitor.sh && \
     mkdir -p /var/log/supervisor && \
     chown -R chrome:chrome /var/log/supervisor
 

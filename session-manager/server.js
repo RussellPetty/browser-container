@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs').promises;
 const cors = require('cors');
+const fetch = require('node-fetch');
 const app = express();
 
 // Security headers for iframe restriction
@@ -83,13 +84,12 @@ app.post('/session', authenticateToken, async (req, res) => {
       console.log(`Created new user profile for: ${userIdentifier} (${userId})`);
     }
     
-    // For local testing with Docker - mount user profile
+    // For local testing with Docker - simplified command without volume mounts
     const command = `docker run -d -p 0:5901 \\
       -e START_URL="${startUrl}" \\
       -e SESSION_ID="${sessionId}" \\
-      -e SESSION_API_URL="http://host.docker.internal:3000" \\
-      -v "${path.resolve(userProfilePath)}:/home/chrome/.config/chromium" \\
-      -v "${path.resolve(userProfilePath)}/Downloads:/home/chrome/Downloads" \\
+      -e SESSION_API_URL="http://172.17.0.1:3000" \\
+      --network browser-container_browser-network \\
       --name chrome-${sessionId} \\
       remote-chrome-final-fixed`;
     
@@ -105,8 +105,8 @@ app.post('/session', authenticateToken, async (req, res) => {
           return res.status(500).json({ error: 'Failed to get port' });
         }
         
-        const port = portStdout.trim().split(':')[1];
-        const iframeSrc = `http://localhost:${port}/vnc.html?autoconnect=true&resize=scale`;
+        const port = portStdout.trim().split('\n')[0].split('0.0.0.0:')[1];
+        const iframeSrc = `http://localhost:3000/vnc/${sessionId}/vnc.html?autoconnect=true&resize=scale`;
         
         sessions.set(sessionId, {
           containerId: `chrome-${sessionId}`,
@@ -342,8 +342,8 @@ app.post('/browser-command/:sessionId', authenticateToken, (req, res) => {
   });
 });
 
-// VNC proxy endpoint with session validation
-app.get('/vnc/:sessionId/*', authenticateToken, (req, res) => {
+// VNC proxy endpoint with session validation (no auth required for browser access)
+app.get('/vnc/:sessionId/*', (req, res) => {
   const { sessionId } = req.params;
   const session = sessions.get(sessionId);
   
@@ -362,11 +362,18 @@ app.get('/vnc/:sessionId/*', authenticateToken, (req, res) => {
     return res.status(403).json({ error: 'Access denied - unauthorized domain' });
   }
   
-  // Proxy to the actual VNC port
-  const vncPath = req.params[0];
-  const vncUrl = `http://localhost:${session.port}/${vncPath}${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`;
+  // Get the VNC path after the session ID - extract from the original URL
+  const fullPath = req.path; // e.g., "/vnc/sessionId/vnc.html"
+  const vncPath = fullPath.replace(`/vnc/${sessionId}/`, ''); // e.g., "vnc.html"
+  const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
   
-  // Simple proxy response
+  // Get the host from the request and replace port 3000 with the VNC port
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.secure ? 'https' : 'http';
+  const vncHost = host.replace(':3000', `:${session.port}`);
+  const vncUrl = `${protocol}://${vncHost}/${vncPath}${queryString}`;
+  
+  // Simple redirect to the VNC URL
   res.redirect(vncUrl);
 });
 
