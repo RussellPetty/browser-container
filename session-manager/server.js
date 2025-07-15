@@ -25,6 +25,10 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.static('public'));
+app.use('/admin', express.static(path.join(__dirname, '../frontend')));
+
+// Trust proxy headers (important for HTTPS detection behind nginx)
+app.set('trust proxy', true);
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -154,8 +158,9 @@ app.post('/session', authenticateToken, async (req, res) => {
         
         // Use the actual host from the request instead of localhost
         const host = req.get('host') || 'localhost:3000';
-        const protocol = req.secure ? 'https' : 'http';
-        const iframeSrc = `${protocol}://${host}/vnc/${sessionId}/vnc.html?autoconnect=true&resize=scale`;
+        // Force HTTPS when behind proxy (nginx serves HTTPS)
+        const protocol = 'https';
+        const iframeSrc = `${protocol}://${host}/vnc/${sessionId}/?autoconnect=true&resize=scale`;
         
         sessions.set(sessionId, {
           containerId: `chrome-${sessionId}`,
@@ -221,12 +226,16 @@ app.post('/download-notification', authenticateToken, (req, res) => {
     // Store download info
     if (!session.downloads) session.downloads = [];
     
+    // Use the protocol and host from the request for download URLs
+    const protocol = 'https';
+    const host = req.get('host') || 'localhost:3000';
+    
     const download = {
       filename,
       filepath,
       filesize,
       timestamp,
-      downloadUrl: `http://localhost:3000/download/${sessionId}/${encodeURIComponent(filename)}`,
+      downloadUrl: `${protocol}://${host}/download/${sessionId}/${encodeURIComponent(filename)}`,
       downloaded: false
     };
     
@@ -391,6 +400,66 @@ app.post('/browser-command/:sessionId', authenticateToken, (req, res) => {
   });
 });
 
+// Admin endpoint - list all active containers
+app.get('/admin/containers', authenticateToken, async (req, res) => {
+  const containers = Array.from(sessions.entries()).map(([sessionId, session]) => ({
+    sessionId,
+    containerId: session.containerId,
+    userId: session.userId,
+    userIdentifier: session.userIdentifier,
+    port: session.port,
+    lastActivity: session.lastActivity,
+    status: session.status || 'active',
+    downloads: session.downloads || []
+  }));
+  
+  res.json({ 
+    containers,
+    totalUsers: userProfiles.size
+  });
+});
+
+// Admin endpoint - pause container
+app.post('/admin/container/:sessionId/pause', authenticateToken, (req, res) => {
+  const { sessionId } = req.params;
+  const session = sessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  
+  exec(`docker pause ${session.containerId}`, (error) => {
+    if (error) {
+      console.error('Error pausing container:', error);
+      return res.status(500).json({ error: 'Failed to pause container' });
+    }
+    
+    session.status = 'paused';
+    res.json({ status: 'paused' });
+  });
+});
+
+// Admin endpoint - resume container
+app.post('/admin/container/:sessionId/resume', authenticateToken, (req, res) => {
+  const { sessionId } = req.params;
+  const session = sessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  
+  exec(`docker unpause ${session.containerId}`, (error) => {
+    if (error) {
+      console.error('Error resuming container:', error);
+      return res.status(500).json({ error: 'Failed to resume container' });
+    }
+    
+    session.status = 'active';
+    session.lastActivity = Date.now();
+    res.json({ status: 'active' });
+  });
+});
+
 // VNC proxy endpoint with session validation (no auth required for browser access)
 app.get('/vnc/:sessionId/*', (req, res) => {
   const { sessionId } = req.params;
@@ -413,18 +482,27 @@ app.get('/vnc/:sessionId/*', (req, res) => {
   
   // Get the VNC path after the session ID - extract from the original URL
   const fullPath = req.path; // e.g., "/vnc/sessionId/vnc.html"
-  const vncPath = fullPath.replace(`/vnc/${sessionId}/`, ''); // e.g., "vnc.html"
-  const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  let vncPath = fullPath.replace(`/vnc/${sessionId}/`, ''); // e.g., "vnc.html"
   
-  // Get the host from the request and replace port 3000 with the VNC port
-  const host = req.get('host') || 'localhost:3000';
+  // If no path specified, default to vnc_lite.html
+  if (!vncPath || vncPath === '') {
+    vncPath = 'vnc_lite.html';
+  }
+  
+  // Redirect to nginx-proxied noVNC instead of proxying
+  const host = req.get('host') || 'localhost';
   const protocol = req.secure ? 'https' : 'http';
-  const vncHost = host.replace(':3000', `:${session.port}`);
-  const vncUrl = `${protocol}://${vncHost}/${vncPath}${queryString}`;
   
-  // Simple redirect to the VNC URL
-  res.redirect(vncUrl);
+  // Build redirect URL with WebSocket and scaling parameters for noVNC
+  // Note: Don't include view_only=false as it gets parsed as string "false" which is truthy
+  // Default is already false, so omit it entirely
+  const wsParams = `host=${host}&port=&path=port/${session.port}/`;
+  const vncParams = `autoconnect=true&scale=true&show_dot=false`;
+  const redirectUrl = `${protocol}://${host}/port/${session.port}/vnc_lite.html?${vncParams}&${wsParams}`;
+  
+  res.redirect(redirectUrl);
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -436,4 +514,7 @@ app.listen(PORT, () => {
   console.log('  GET /download/:sessionId/:filename - Download file');
   console.log('  POST /stop/:sessionId - Stop session');
   console.log('  GET /admin/users - List all users');
+  console.log('  GET /admin/containers - List all containers');
+  console.log('  POST /admin/container/:sessionId/pause - Pause container');
+  console.log('  POST /admin/container/:sessionId/resume - Resume container');
 });

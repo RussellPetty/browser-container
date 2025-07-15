@@ -45,4 +45,9 @@ exec chromium-browser \
     --user-data-dir=/home/chrome/.config/chromium \
     --window-size=1280,1024 \
     --start-maximized \
+    --disable-session-crashed-bubble \
+    --disable-infobars \
+    --disable-restore-session-state \
+    --disable-background-mode \
+    --new-window \
     "${START_URL:-https://google.com}"
